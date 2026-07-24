@@ -2,6 +2,27 @@ import { useState, useEffect, useCallback } from 'react';
 
 const API_URL = '/api/trends';
 const ALERT_URL = '/api/alert';
+const ALERT_COOLDOWN_MS = 15 * 60 * 1000; // don't auto-re-alert the same ticker within 15 min
+const COOLDOWN_STORAGE_KEY = 'trendpulse_alert_cooldowns';
+
+function getLastAlertTime(ticker) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COOLDOWN_STORAGE_KEY) || '{}');
+    return raw[ticker] || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function markAlerted(ticker) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(COOLDOWN_STORAGE_KEY) || '{}');
+    raw[ticker] = Date.now();
+    localStorage.setItem(COOLDOWN_STORAGE_KEY, JSON.stringify(raw));
+  } catch {
+    // localStorage unavailable — cooldown just won't persist, not fatal
+  }
+}
 
 export default function App() {
   const [trends, setTrends] = useState([]);
@@ -37,12 +58,16 @@ export default function App() {
       setLastUpdate(new Date().toLocaleTimeString());
       setError(null);
       
-      // Auto-alert on BUY signals when enabled
+      // Auto-alert on BUY signals when enabled (throttled per-ticker so the
+      // 60s refresh loop doesn't re-fire the same alert every minute)
       if (alertsEnabled) {
         newTrends.forEach(t => {
           const signal = getSignal(t.momentum, t.sentiment);
           if (signal.label === 'BUY' && t.momentum >= 75) {
-            sendAlert(t, signal.label);
+            const sinceLastAlert = Date.now() - getLastAlertTime(t.ticker);
+            if (sinceLastAlert >= ALERT_COOLDOWN_MS) {
+              sendAlert(t, signal.label);
+            }
           }
         });
       }
@@ -69,6 +94,7 @@ export default function App() {
       });
       const data = await res.json();
       if (data.sent) {
+        markAlerted(trend.ticker);
         setAlertStatus({ ticker: trend.ticker, success: true, message: `Alert sent for ${trend.ticker}` });
       } else {
         setAlertStatus({ ticker: trend.ticker, success: false, message: data.reason || 'Not sent' });

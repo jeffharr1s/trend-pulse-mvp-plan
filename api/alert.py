@@ -14,6 +14,7 @@ POST /api/alert
 
 import os
 import json
+import html
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 import requests
@@ -76,26 +77,29 @@ def send_email(ticker: str, signal: str, momentum: int, sentiment: float, source
         return False
     
     sentiment_str = f"{'+' if sentiment > 0 else ''}{int(sentiment * 100)}%"
-    
-    html = f"""
+    safe_ticker = html.escape(str(ticker))
+    safe_signal = html.escape(str(signal))
+    safe_source = html.escape(str(source).capitalize())
+
+    email_html = f"""
     <div style="font-family: system-ui, sans-serif; max-width: 400px; margin: 0 auto; padding: 20px;">
       <h2 style="color: {'#22c55e' if signal == 'BUY' else '#ef4444' if signal == 'SELL' else '#f59e0b'};">
-        {signal} Signal: {ticker}
+        {safe_signal} Signal: {safe_ticker}
       </h2>
       <table style="width: 100%; border-collapse: collapse;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><b>Momentum</b></td><td>{momentum}/100</td></tr>
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee;"><b>Sentiment</b></td><td>{sentiment_str}</td></tr>
-        <tr><td style="padding: 8px 0;"><b>Source</b></td><td>{source.capitalize()}</td></tr>
+        <tr><td style="padding: 8px 0;"><b>Source</b></td><td>{safe_source}</td></tr>
       </table>
       <p style="color: #666; font-size: 12px; margin-top: 20px;">TrendPulse • Not financial advice</p>
     </div>
     """
-    
+
     payload = {
         "from": "TrendPulse <alerts@resend.dev>",
         "to": [to_email],
-        "subject": f"🚨 {signal}: {ticker} (Momentum {momentum})",
-        "html": html
+        "subject": f"🚨 {safe_signal}: {safe_ticker} (Momentum {momentum})",
+        "html": email_html
     }
     
     try:
@@ -150,14 +154,24 @@ class handler(BaseHTTPRequestHandler):
             body = self.rfile.read(content_length)
             data = json.loads(body) if body else {}
             
-            ticker = data.get('ticker', 'UNKNOWN')
-            momentum = data.get('momentum', 50)
-            sentiment = data.get('sentiment', 0)
-            source = data.get('source', 'reddit')
+            ticker = str(data.get('ticker', 'UNKNOWN'))[:20]
+            source = str(data.get('source', 'reddit'))[:20]
             channels = data.get('channels', ['discord', 'email'])
-            
+
+            try:
+                momentum = max(0, min(100, int(data.get('momentum', 50))))
+            except (TypeError, ValueError):
+                momentum = 50
+
+            try:
+                sentiment = max(-1.0, min(1.0, float(data.get('sentiment', 0))))
+            except (TypeError, ValueError):
+                sentiment = 0.0
+
             # Determine signal if not provided
             signal = data.get('signal') or determine_signal(momentum, sentiment)
+            if signal not in ('BUY', 'SELL', 'WATCH', 'HOLD'):
+                signal = determine_signal(momentum, sentiment)
             
             # Check if should alert
             if not should_alert(signal, momentum):
