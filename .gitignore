@@ -8,3 +8,8 @@ __pycache__/
 *.pyc
 
 .vercel
+
+# Scraper output/session — never commit real session cookies or scan data
+data/
+scraper/browser_profile/
+logs/
