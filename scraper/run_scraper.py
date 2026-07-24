@@ -200,7 +200,11 @@ def write_snapshot(snapshot: dict):
 
 def ensure_logged_in(context):
     reddit_page = context.new_page()
-    reddit_page.goto('https://www.reddit.com/', wait_until='domcontentloaded', timeout=30000)
+    # old.reddit.com rather than www.reddit.com — the new React site runs a much
+    # more aggressive bot-detection challenge; old.reddit's login still
+    # authenticates the same reddit.com session cookies, and it's where the
+    # scraper reads from anyway.
+    reddit_page.goto('https://old.reddit.com/', wait_until='domcontentloaded', timeout=30000)
     x_page = context.new_page()
     x_page.goto('https://x.com/', wait_until='domcontentloaded', timeout=30000)
 
@@ -212,11 +216,32 @@ def ensure_logged_in(context):
     x_page.close()
 
 
+def launch_context(p):
+    """Launch the persistent browser, preferring real installed Chrome over
+    Playwright's bundled Chromium build — Reddit/X's bot-detection specifically
+    fingerprints the bundled build far more aggressively than a real Chrome
+    install. Also strips the automation flags that make navigator.webdriver
+    true and trigger the "Chrome is being controlled by automated test
+    software" banner in the first place.
+    """
+    common_kwargs = dict(
+        headless=False,
+        viewport={'width': 1280, 'height': 900},
+        args=['--disable-blink-features=AutomationControlled'],
+        ignore_default_args=['--enable-automation'],
+    )
+    try:
+        return p.chromium.launch_persistent_context(PROFILE_DIR, channel='chrome', **common_kwargs)
+    except Exception as e:
+        log.warning(f"Real Chrome not available ({e}); falling back to bundled Chromium "
+                    f"(more likely to get bot-detection challenges). Run "
+                    f"`playwright install chrome` to fix this.")
+        return p.chromium.launch_persistent_context(PROFILE_DIR, **common_kwargs)
+
+
 def main():
     with sync_playwright() as p:
-        context = p.chromium.launch_persistent_context(
-            PROFILE_DIR, headless=False, viewport={'width': 1280, 'height': 900}
-        )
+        context = launch_context(p)
         ensure_logged_in(context)
 
         log.info(f"Scanning every {SCRAPE_INTERVAL_SECONDS}s. Ctrl+C to stop.")
