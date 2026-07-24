@@ -12,6 +12,10 @@ import json
 import os
 from http.server import BaseHTTPRequestHandler
 
+from _logging_setup import get_logger
+
+log = get_logger('api')
+
 DATA_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'data', 'latest_trends.json'
@@ -32,6 +36,7 @@ def load_latest_trends() -> dict:
         with open(DATA_FILE, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as e:
+        log.error(f'Could not read {DATA_FILE}: {e}')
         return {
             'trends': [],
             'updated': None,
@@ -53,6 +58,7 @@ class handler(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(data).encode())
 
         except Exception as e:
+            log.exception('do_GET failed')
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()

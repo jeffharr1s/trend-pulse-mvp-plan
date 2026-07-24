@@ -19,6 +19,10 @@ from datetime import datetime
 from http.server import BaseHTTPRequestHandler
 import requests
 
+from _logging_setup import get_logger
+
+log = get_logger('api')
+
 
 # ============================================================================
 # Alert Senders
@@ -64,7 +68,7 @@ def send_discord(ticker: str, signal: str, momentum: int, sentiment: float, sour
         resp = requests.post(webhook_url, json=payload, timeout=10)
         return resp.status_code == 204
     except Exception as e:
-        print(f"Discord error: {e}")
+        log.error(f"Discord send failed: {e}")
         return False
 
 
@@ -111,7 +115,7 @@ def send_email(ticker: str, signal: str, momentum: int, sentiment: float, source
         )
         return resp.status_code == 200
     except Exception as e:
-        print(f"Email error: {e}")
+        log.error(f"Email send failed: {e}")
         return False
 
 
@@ -192,7 +196,9 @@ class handler(BaseHTTPRequestHandler):
             
             if 'email' in channels:
                 results['email'] = send_email(ticker, signal, momentum, sentiment, source)
-            
+
+            log.info(f"Alert sent: {ticker} {signal} momentum={momentum} channels={results}")
+
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -205,11 +211,12 @@ class handler(BaseHTTPRequestHandler):
             }).encode())
             
         except Exception as e:
+            log.exception('do_POST failed')
             self.send_response(500)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps({'error': str(e)}).encode())
-    
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')

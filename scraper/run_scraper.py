@@ -27,6 +27,9 @@ from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'api'))
 from _signals import extract_tickers, calc_sentiment, calc_momentum  # noqa: E402
+from _logging_setup import get_logger  # noqa: E402
+
+log = get_logger('scraper')
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
@@ -60,7 +63,7 @@ def scrape_reddit(context) -> dict:
                 try:
                     page.goto(url, wait_until='domcontentloaded', timeout=30000)
                 except Exception as e:
-                    print(f"  Reddit fetch failed for {url}: {e}")
+                    log.error(f"Reddit fetch failed for {url}: {e}")
                     continue
 
                 posts = page.query_selector_all('div.thing')
@@ -118,7 +121,7 @@ def scrape_x_trends(context) -> list:
             elif any(kw in text.lower() for kw in ['stock', 'crypto', 'bitcoin', 'ethereum', '$']):
                 trends.append({'ticker': text[:10], 'trend_text': text, 'source': 'twitter'})
     except Exception as e:
-        print(f"  X trending fetch failed: {e}")
+        log.error(f"X trending fetch failed: {e}")
     finally:
         page.close()
 
@@ -203,6 +206,7 @@ def ensure_logged_in(context):
 
     print('\nIf either tab shows a login page, log in now in the opened browser window.')
     input("Press Enter here once you're logged into both Reddit and X to start scraping... ")
+    log.info('Login gate cleared, starting scan loop')
 
     reddit_page.close()
     x_page.close()
@@ -215,18 +219,18 @@ def main():
         )
         ensure_logged_in(context)
 
-        print(f"Scanning every {SCRAPE_INTERVAL_SECONDS}s. Ctrl+C to stop.")
+        log.info(f"Scanning every {SCRAPE_INTERVAL_SECONDS}s. Ctrl+C to stop.")
         while True:
             cycle_start = time.time()
             try:
-                print(f"[{datetime.now().isoformat(timespec='seconds')}] Scan starting...")
+                log.info('Scan starting...')
                 reddit_data = scrape_reddit(context)
                 twitter_data = scrape_x_trends(context)
                 snapshot = build_snapshot(reddit_data, twitter_data)
                 write_snapshot(snapshot)
-                print(f"  -> {len(snapshot['trends'])} tickers written to {DATA_FILE}")
-            except Exception as e:
-                print(f"  !! Scan failed: {e}")
+                log.info(f"Scan complete — {len(snapshot['trends'])} tickers written to {DATA_FILE}")
+            except Exception:
+                log.exception('Scan failed')
 
             elapsed = time.time() - cycle_start
             time.sleep(max(5, SCRAPE_INTERVAL_SECONDS - elapsed))
