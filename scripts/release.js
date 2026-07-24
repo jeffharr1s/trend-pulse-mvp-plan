@@ -36,11 +36,38 @@ if (!pendingCommits && changedFiles.length === 0) {
 }
 
 const MAJOR_TRIGGER_WORDS = /\b(major|breaking|rewrite|replace)\b/i;
-const MAJOR_SURFACE_FILES = new Set(['vercel.json', 'package.json', 'requirements.txt']);
+
+// Deliberately narrower than "file X changed" — bumping npm scripts or
+// reformatting vercel.json shouldn't count as a major/breaking change.
+// Only the parts of these files that represent real architecture shifts do.
+function dependenciesChanged() {
+  if (!changedFiles.includes('requirements.txt')) return false;
+  // requirements.txt is pure dependency list — any change is a dependency change.
+  return true;
+}
+
+function packageDependenciesChanged() {
+  if (!changedFiles.includes('package.json') || !hasUpstream) return false;
+  const oldPkg = JSON.parse(sh(`git show ${upstream}:package.json`));
+  const newPkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  return (
+    JSON.stringify(oldPkg.dependencies || {}) !== JSON.stringify(newPkg.dependencies || {}) ||
+    JSON.stringify(oldPkg.devDependencies || {}) !== JSON.stringify(newPkg.devDependencies || {})
+  );
+}
+
+function deployConfigChanged() {
+  if (!changedFiles.includes('vercel.json') || !hasUpstream) return false;
+  const oldCfg = JSON.parse(sh(`git show ${upstream}:vercel.json`));
+  const newCfg = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
+  return JSON.stringify(oldCfg) !== JSON.stringify(newCfg);
+}
 
 const isMajor =
   MAJOR_TRIGGER_WORDS.test(pendingCommits) ||
-  changedFiles.some((f) => MAJOR_SURFACE_FILES.has(f));
+  dependenciesChanged() ||
+  packageDependenciesChanged() ||
+  deployConfigChanged();
 
 const pkgPath = new URL('../package.json', import.meta.url);
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
