@@ -1,0 +1,4 @@
+# Local scraper only — deliberately kept out of the Vercel-facing
+# requirements.txt (Playwright needs a real browser binary and doesn't
+# run in a serverless function anyway).
+playwright==1.48.0
