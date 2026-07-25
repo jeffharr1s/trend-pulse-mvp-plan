@@ -23,13 +23,13 @@ Write-Host "Checking $logPath for a Chrome-not-found warning..."
 $needsChromeInstall = $false
 if (Test-Path $logPath) {
     if (Select-String -Path $logPath -Pattern 'Real Chrome not available' -Quiet) {
-        Write-Host "Found it — run_scraper.py fell back to bundled Chromium last time." -ForegroundColor Yellow
+        Write-Host "Found it - run_scraper.py fell back to bundled Chromium last time." -ForegroundColor Yellow
         $needsChromeInstall = $true
     } else {
-        Write-Host "No warning found — real Chrome was already being used (or wasn't needed yet)."
+        Write-Host "No warning found - real Chrome was already being used (or wasn't needed yet)."
     }
 } else {
-    Write-Host "No logs/scraper.log yet — installing Chrome anyway to be safe."
+    Write-Host "No logs/scraper.log yet - installing Chrome anyway to be safe."
     $needsChromeInstall = $true
 }
 
@@ -38,7 +38,7 @@ if ($needsChromeInstall) {
     Write-Host "`nInstalling Chrome for Playwright (python -m playwright install chrome)..."
     python -m playwright install chrome
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "playwright install chrome failed (exit code $LASTEXITCODE) — see output above." -ForegroundColor Red
+        Write-Host "playwright install chrome failed (exit code $LASTEXITCODE) - see output above." -ForegroundColor Red
         exit 1
     }
     Write-Host "Chrome installed." -ForegroundColor Green
@@ -50,7 +50,7 @@ if (Test-Path $profilePath) {
     Remove-Item -Recurse -Force $profilePath
     Write-Host "Deleted. You'll need to log into Reddit and X again on the next run." -ForegroundColor Green
 } else {
-    Write-Host "`nNo browser_profile directory found — nothing to delete."
+    Write-Host "`nNo browser_profile directory found - nothing to delete."
 }
 
 Write-Host "`nDone. Run: python scraper\run_scraper.py"

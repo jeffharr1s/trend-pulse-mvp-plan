@@ -2,14 +2,14 @@
 .SYNOPSIS
   Launches a real, non-automated Chrome with remote debugging enabled,
   pointed at scraper/browser_profile/. Run this FIRST, log into Reddit
-  and X normally in the window it opens, THEN run run_scraper.py — it
+  and X normally in the window it opens, THEN run run_scraper.py - it
   attaches to this browser instead of launching its own.
 
 .WHY
   Any Playwright-launched Chrome sets navigator.webdriver=true. X's
   Prelude fraud-check SDK fails to initialize when that's set ("core
   worker could not be instantiated"), leaving account verification stuck
-  in a broken server-side session no matter what you type — this held
+  in a broken server-side session no matter what you type - this held
   true even with real Chrome, hidden automation flags, and a profile
   seeded from an already-logged-in session. A normally-launched Chrome
   never sets that flag, so verification works like it would for any
@@ -44,7 +44,7 @@ if (-not $chromePath) {
 
 if (Get-Process chrome -ErrorAction SilentlyContinue) {
     Write-Host "Chrome is already running elsewhere. That's fine as long as it's not using" -ForegroundColor Yellow
-    Write-Host "the same profile folder ($profileDir) — this launches a separate instance." -ForegroundColor Yellow
+    Write-Host "the same profile folder ($profileDir) - this launches a separate instance." -ForegroundColor Yellow
 }
 
 if (-not (Test-Path $profileDir)) {
