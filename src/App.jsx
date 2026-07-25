@@ -40,6 +40,12 @@ export default function App() {
     return { label: 'HOLD', color: '#6b7280', bg: '#f3f4f6' };
   };
 
+  const SOURCE_BADGES = {
+    reddit: { label: 'Reddit', color: '#ff4500' },
+    twitter: { label: 'X', color: '#1d9bf0' },
+    telegram: { label: 'Telegram', color: '#24A1DE' },
+  };
+
   const getMomentumColor = (m) => {
     if (m >= 70) return '#22c55e';
     if (m >= 50) return '#f59e0b';
@@ -123,7 +129,7 @@ export default function App() {
         <div>
           <h1 style={{ margin: 0, fontSize: '24px', fontWeight: 700 }}>📊 TrendPulse</h1>
           <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#94a3b8' }}>
-            Real-time social sentiment • Reddit + X Trends
+            Real-time social sentiment • Reddit + X + Telegram
           </p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -173,7 +179,7 @@ export default function App() {
 
       {/* Filters */}
       <div style={{ padding: '16px 24px', display: 'flex', gap: '8px' }}>
-        {['all', 'reddit', 'twitter'].map(f => (
+        {['all', 'reddit', 'twitter', 'telegram'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -188,7 +194,7 @@ export default function App() {
               textTransform: 'capitalize'
             }}
           >
-            {f === 'reddit' ? '🔴 Reddit' : f === 'twitter' ? '𝕏 Twitter' : '📊 All'}
+            {f === 'reddit' ? '🔴 Reddit' : f === 'twitter' ? '𝕏 Twitter' : f === 'telegram' ? '✈️ Telegram' : '📊 All'}
           </button>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: '13px', color: '#64748b' }}>
@@ -231,10 +237,10 @@ export default function App() {
                       marginLeft: '8px', 
                       fontSize: '11px', 
                       padding: '2px 6px', 
-                      background: t.source === 'reddit' ? '#ff4500' : '#1d9bf0',
+                      background: (SOURCE_BADGES[t.source] || SOURCE_BADGES.twitter).color,
                       borderRadius: '4px'
                     }}>
-                      {t.source === 'reddit' ? 'Reddit' : 'X'}
+                      {(SOURCE_BADGES[t.source] || SOURCE_BADGES.twitter).label}
                     </span>
                   </div>
                   <span style={{ 

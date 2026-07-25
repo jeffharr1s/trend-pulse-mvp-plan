@@ -29,6 +29,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from _signals import extract_tickers, calc_sentiment, calc_momentum  # noqa: E402
 from _logging_setup import get_logger  # noqa: E402
 
+from telegram_source import scrape_telegram_channels  # noqa: E402
+
 log = get_logger('scraper')
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -132,7 +134,8 @@ def scrape_x_trends(context) -> list:
 # Combine into the same response shape App.jsx already expects
 # ============================================================================
 
-def build_snapshot(reddit_data: dict, twitter_data: list) -> dict:
+def build_snapshot(reddit_data: dict, twitter_data: list, telegram_data: list = None) -> dict:
+    telegram_data = telegram_data or []
     trends = []
 
     for ticker, data in reddit_data.items():
@@ -169,6 +172,28 @@ def build_snapshot(reddit_data: dict, twitter_data: list) -> dict:
             'posts': 0,
         })
 
+    telegram_agg = defaultdict(lambda: {'mentions': 0, 'sentiment_sum': 0})
+    for m in telegram_data:
+        d = telegram_agg[m['ticker']]
+        d['mentions'] += 1
+        d['sentiment_sum'] += m.get('sentiment', 0)
+
+    for ticker, data in telegram_agg.items():
+        avg_sentiment = data['sentiment_sum'] / max(1, data['mentions'])
+        momentum = min(80, 30 + data['mentions'] * 10)
+        if ticker.replace('$', '') in reddit_data:
+            momentum = min(95, momentum + 15)
+
+        trends.append({
+            'ticker': f"${ticker}" if not ticker.startswith('$') else ticker,
+            'source': 'telegram',
+            'momentum': momentum,
+            'mentions': data['mentions'],
+            'sentiment': round(avg_sentiment, 2),
+            'subreddit': None,
+            'posts': 0,
+        })
+
     trends.sort(key=lambda x: x['momentum'], reverse=True)
 
     seen = set()
@@ -182,7 +207,11 @@ def build_snapshot(reddit_data: dict, twitter_data: list) -> dict:
     return {
         'trends': unique_trends[:20],
         'updated': datetime.now(timezone.utc).isoformat(),
-        'sources': {'reddit': len(reddit_data), 'twitter': len(twitter_tickers)},
+        'sources': {
+            'reddit': len(reddit_data),
+            'twitter': len(twitter_tickers),
+            'telegram': len(telegram_agg),
+        },
     }
 
 
@@ -291,7 +320,8 @@ def main():
                 log.info('Scan starting...')
                 reddit_data = scrape_reddit(context)
                 twitter_data = scrape_x_trends(context)
-                snapshot = build_snapshot(reddit_data, twitter_data)
+                telegram_data = scrape_telegram_channels()  # no browser needed — plain HTTP
+                snapshot = build_snapshot(reddit_data, twitter_data, telegram_data)
                 write_snapshot(snapshot)
                 log.info(f"Scan complete — {len(snapshot['trends'])} tickers written to {DATA_FILE}")
             except Exception:
