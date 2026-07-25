@@ -1,5 +1,5 @@
 """
-TrendPulse scraper — drives a real, logged-in browser under your own
+TrendPulse scraper - drives a real, logged-in browser under your own
 Reddit and X accounts to find ticker mentions, instead of the Reddit API
 (PRAW) or a trends24.in mirror. Personal use only.
 
@@ -8,11 +8,11 @@ Run directly (not via the API): `python scraper/run_scraper.py`
 First run:
   A visible Chromium window opens to Reddit and X. Log in manually in
   that window (once), then press Enter in this terminal. The session is
-  saved to scraper/browser_profile/ (gitignored — it holds real login
+  saved to scraper/browser_profile/ (gitignored - it holds real login
   cookies) so later runs skip the login step.
 
 Every cycle it writes the combined snapshot to data/latest_trends.json,
-which api/trends.py just reads and serves — decoupled so a slow browser
+which api/trends.py just reads and serves - decoupled so a slow browser
 scan is never on the hook for a request/response deadline.
 """
 
@@ -44,14 +44,14 @@ SCRAPE_INTERVAL_SECONDS = int(os.environ.get('SCRAPE_INTERVAL_SECONDS', '300'))
 
 
 # ============================================================================
-# Reddit — old.reddit.com listing pages (stable, server-rendered DOM;
+# Reddit - old.reddit.com listing pages (stable, server-rendered DOM;
 # the new React UI churns its markup far more often)
 # ============================================================================
 
 def scrape_reddit(context) -> dict:
     """Scrape post titles + scores from wallstreetbets/cryptocurrency while logged in.
 
-    Note: only the post title is scraped (not selftext) — listing pages
+    Note: only the post title is scraped (not selftext) - listing pages
     don't expose selftext without opening each post individually, which
     would be far slower per cycle. Titles carry the ticker/sentiment
     signal in the large majority of WSB/crypto posts.
@@ -99,7 +99,7 @@ def scrape_reddit(context) -> dict:
 
 
 # ============================================================================
-# X/Twitter — live Explore/Trending page while logged in
+# X/Twitter - live Explore/Trending page while logged in
 # (replaces both the trends24.in mirror and the old local Selenium script)
 # ============================================================================
 
@@ -220,7 +220,7 @@ def write_snapshot(snapshot: dict):
     tmp_path = DATA_FILE + '.tmp'
     with open(tmp_path, 'w', encoding='utf-8') as f:
         json.dump(snapshot, f)
-    os.replace(tmp_path, DATA_FILE)  # atomic — api/trends.py never reads a half-written file
+    os.replace(tmp_path, DATA_FILE)  # atomic - api/trends.py never reads a half-written file
 
 
 # ============================================================================
@@ -229,7 +229,7 @@ def write_snapshot(snapshot: dict):
 
 def ensure_logged_in(context):
     reddit_page = context.new_page()
-    # old.reddit.com rather than www.reddit.com — the new React site runs a much
+    # old.reddit.com rather than www.reddit.com - the new React site runs a much
     # more aggressive bot-detection challenge; old.reddit's login still
     # authenticates the same reddit.com session cookies, and it's where the
     # scraper reads from anyway.
@@ -250,14 +250,14 @@ CDP_URL = 'http://localhost:9222'
 
 def launch_own_context(p):
     """Launch our own persistent browser, preferring real installed Chrome over
-    Playwright's bundled Chromium build — Reddit/X's bot-detection specifically
+    Playwright's bundled Chromium build - Reddit/X's bot-detection specifically
     fingerprints the bundled build far more aggressively than a real Chrome
     install. Also strips the automation flags that make navigator.webdriver
     true and trigger the "Chrome is being controlled by automated test
     software" banner in the first place.
 
     Works fine for Reddit. X's account-verification step will likely still
-    fail in this mode — see get_browser_context() docstring.
+    fail in this mode - see get_browser_context() docstring.
     """
     common_kwargs = dict(
         headless=False,
@@ -278,19 +278,19 @@ def get_browser_context(p):
     """Returns (context, owns_browser).
 
     Prefers attaching to a real, manually-launched Chrome (started via
-    scraper/launch-chrome-debug.ps1, with no automation flags at all — so
+    scraper/launch-chrome-debug.ps1, with no automation flags at all - so
     navigator.webdriver stays false). This matters specifically for X:
     its Prelude fraud-check SDK ("core worker could not be instantiated")
-    fails to initialize in ANY Playwright-launched browser — real Chrome,
+    fails to initialize in ANY Playwright-launched browser - real Chrome,
     hidden automation flags, even a profile seeded from a real logged-in
-    session all hit the same wall — leaving account verification stuck in
+    session all hit the same wall - leaving account verification stuck in
     a broken server-side session (repeated 404s on .../flow/viewer.json)
     no matter what's typed into the verification form. A normally-launched
     Chrome never sets navigator.webdriver, so verification works like it
     would for any regular user; Playwright then just attaches afterward.
 
     Falls back to launching our own browser if nothing's listening on the
-    debug port — fine for Reddit-only, X will likely fail there.
+    debug port - fine for Reddit-only, X will likely fail there.
     """
     try:
         browser = p.chromium.connect_over_cdp(CDP_URL)
@@ -300,7 +300,7 @@ def get_browser_context(p):
     except Exception as e:
         log.warning(
             f"Couldn't attach to a manually-launched Chrome on {CDP_URL} ({e}). "
-            f"Falling back to a Playwright-launched browser — X's account "
+            f"Falling back to a Playwright-launched browser - X's account "
             f"verification will likely fail in this mode (Reddit is unaffected). "
             f"Run scraper\\launch-chrome-debug.ps1 first, log into X there, then "
             f"re-run this script for reliable X scraping."
@@ -320,12 +320,22 @@ def main():
                 log.info('Scan starting...')
                 reddit_data = scrape_reddit(context)
                 twitter_data = scrape_x_trends(context)
-                telegram_data = scrape_telegram_channels()  # no browser needed — plain HTTP
+                telegram_data = scrape_telegram_channels()  # no browser needed, plain HTTP
                 snapshot = build_snapshot(reddit_data, twitter_data, telegram_data)
                 write_snapshot(snapshot)
-                log.info(f"Scan complete — {len(snapshot['trends'])} tickers written to {DATA_FILE}")
+                log.info(f"Scan complete, {len(snapshot['trends'])} tickers written to {DATA_FILE}")
             except Exception:
-                log.exception('Scan failed')
+                # A closed/crashed browser (manually-launched Chrome closed,
+                # bundled Chromium crashed, etc.) otherwise fails every cycle
+                # forever with the same dead context, requiring a manual
+                # restart. Re-acquire the browser before the next cycle
+                # instead - cheap if it's just a CDP reattach, a fresh launch
+                # if we own the browser and it's really gone.
+                log.exception('Scan failed, attempting to recover the browser before the next cycle')
+                try:
+                    context, owns_browser = get_browser_context(p)
+                except Exception:
+                    log.exception('Could not recover the browser, will retry next cycle')
 
             elapsed = time.time() - cycle_start
             time.sleep(max(5, SCRAPE_INTERVAL_SECONDS - elapsed))
