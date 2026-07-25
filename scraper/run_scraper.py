@@ -216,13 +216,19 @@ def ensure_logged_in(context):
     x_page.close()
 
 
-def launch_context(p):
-    """Launch the persistent browser, preferring real installed Chrome over
+CDP_URL = 'http://localhost:9222'
+
+
+def launch_own_context(p):
+    """Launch our own persistent browser, preferring real installed Chrome over
     Playwright's bundled Chromium build — Reddit/X's bot-detection specifically
     fingerprints the bundled build far more aggressively than a real Chrome
     install. Also strips the automation flags that make navigator.webdriver
     true and trigger the "Chrome is being controlled by automated test
     software" banner in the first place.
+
+    Works fine for Reddit. X's account-verification step will likely still
+    fail in this mode — see get_browser_context() docstring.
     """
     common_kwargs = dict(
         headless=False,
@@ -239,9 +245,43 @@ def launch_context(p):
         return p.chromium.launch_persistent_context(PROFILE_DIR, **common_kwargs)
 
 
+def get_browser_context(p):
+    """Returns (context, owns_browser).
+
+    Prefers attaching to a real, manually-launched Chrome (started via
+    scraper/launch-chrome-debug.ps1, with no automation flags at all — so
+    navigator.webdriver stays false). This matters specifically for X:
+    its Prelude fraud-check SDK ("core worker could not be instantiated")
+    fails to initialize in ANY Playwright-launched browser — real Chrome,
+    hidden automation flags, even a profile seeded from a real logged-in
+    session all hit the same wall — leaving account verification stuck in
+    a broken server-side session (repeated 404s on .../flow/viewer.json)
+    no matter what's typed into the verification form. A normally-launched
+    Chrome never sets navigator.webdriver, so verification works like it
+    would for any regular user; Playwright then just attaches afterward.
+
+    Falls back to launching our own browser if nothing's listening on the
+    debug port — fine for Reddit-only, X will likely fail there.
+    """
+    try:
+        browser = p.chromium.connect_over_cdp(CDP_URL)
+        context = browser.contexts[0] if browser.contexts else browser.new_context()
+        log.info(f'Attached to your manually-launched Chrome ({CDP_URL}).')
+        return context, False
+    except Exception as e:
+        log.warning(
+            f"Couldn't attach to a manually-launched Chrome on {CDP_URL} ({e}). "
+            f"Falling back to a Playwright-launched browser — X's account "
+            f"verification will likely fail in this mode (Reddit is unaffected). "
+            f"Run scraper\\launch-chrome-debug.ps1 first, log into X there, then "
+            f"re-run this script for reliable X scraping."
+        )
+        return launch_own_context(p), True
+
+
 def main():
     with sync_playwright() as p:
-        context = launch_context(p)
+        context, owns_browser = get_browser_context(p)
         ensure_logged_in(context)
 
         log.info(f"Scanning every {SCRAPE_INTERVAL_SECONDS}s. Ctrl+C to stop.")
